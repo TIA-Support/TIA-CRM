@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TIA CRM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<!-- ===== LOGIN ===== -->
+<div id="login-screen" class="auth-screen">
+  <div class="auth-card">
+    <div class="auth-brand"><span class="brand-mark">◆</span><span class="brand-name">TIA CRM</span></div>
+    <p class="auth-sub">Technology Infrastructure Architects</p>
+    <form id="login-form">
+      <label>Email</label>
+      <input type="email" id="login-email" required autocomplete="username" />
+      <label>Password</label>
+      <input type="password" id="login-password" required autocomplete="current-password" />
+      <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+      <p class="auth-error" id="login-error"></p>
+    </form>
+  </div>
+</div>
+
+<!-- ===== APP ===== -->
+<div id="app" class="app hidden">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">◆</span><span class="brand-name">TIA CRM</span></div>
+    <nav>
+      <button class="nav-item active" data-view="dashboard">Dashboard</button>
+      <button class="nav-item" data-view="companies">Companies</button>
+      <button class="nav-item" data-view="pipeline">Pipeline</button>
+      <button class="nav-item" data-view="tasks">Tasks</button>
+      <button class="nav-item" data-view="team" id="nav-team">Team</button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="me">
+        <div class="me-avatar" id="me-avatar">?</div>
+        <div><div class="me-name" id="me-name">—</div><div class="me-role" id="me-role">—</div></div>
+      </div>
+      <button id="logout-btn" class="link-btn">Sign out</button>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- Dashboard -->
+    <section id="view-dashboard" class="view">
+      <header class="view-header"><h1>Dashboard</h1><p class="eyebrow" id="today-date"></p></header>
+      <div class="stat-grid" id="stat-grid"></div>
+      <div class="panel-grid">
+        <div class="panel">
+          <h3>Pipeline by stage</h3>
+          <div id="stage-breakdown" class="status-breakdown"></div>
+        </div>
+        <div class="panel">
+          <h3>Calls this month</h3>
+          <div id="leaderboard" class="leaderboard"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Companies list -->
+    <section id="view-companies" class="view hidden">
+      <header class="view-header">
+        <h1>Companies</h1>
+        <button class="btn btn-primary" id="add-company-btn">+ Add company</button>
+      </header>
+      <div class="toolbar">
+        <input type="text" id="company-search" placeholder="Search company or industry…" />
+        <select id="status-filter">
+          <option value="">All statuses</option>
+          <option value="new">New</option>
+          <option value="contacted">Contacted</option>
+          <option value="interested">Interested</option>
+          <option value="not_interested">Not interested</option>
+          <option value="customer">Customer</option>
+          <option value="do_not_contact">Do not contact</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table id="companies-table">
+          <thead><tr><th>Company</th><th>Industry</th><th>Status</th><th>Assigned</th><th>Contacts</th><th>Open deals</th><th>Next task</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Company detail -->
+    <section id="view-company-detail" class="view hidden">
+      <header class="view-header"><button class="back-btn" id="back-to-companies">← Back to companies</button></header>
+      <div id="company-detail-content"></div>
+    </section>
+
+    <!-- Pipeline (kanban) -->
+    <section id="view-pipeline" class="view hidden">
+      <header class="view-header">
+        <h1>Pipeline</h1>
+        <button class="btn btn-primary" id="add-deal-btn">+ Add deal</button>
+      </header>
+      <div class="kanban" id="kanban-board"></div>
+    </section>
+
+    <!-- Tasks -->
+    <section id="view-tasks" class="view hidden">
+      <header class="view-header">
+        <h1>Tasks</h1>
+        <button class="btn btn-primary" id="add-task-btn">+ Add task</button>
+      </header>
+      <div class="toolbar">
+        <select id="task-status-filter">
+          <option value="pending">Pending</option>
+          <option value="done">Done</option>
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table id="tasks-table">
+          <thead><tr><th></th><th>Task</th><th>Company</th><th>Due</th><th>Assigned</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Team -->
+    <section id="view-team" class="view hidden">
+      <header class="view-header">
+        <h1>Team</h1>
+        <button class="btn btn-primary" id="add-user-btn">+ Add team member</button>
+      </header>
+      <div class="table-wrap">
+        <table id="team-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ===== MODALS ===== -->
+<div id="modal-backdrop" class="modal-backdrop hidden">
+
+  <div id="modal-add-company" class="modal hidden">
+    <h2>Add company</h2>
+    <form id="add-company-form">
+      <label>Company name *</label><input type="text" name="name" required />
+      <div class="field-row">
+        <div><label>Industry</label><input type="text" name="industry" /></div>
+        <div><label>Website</label><input type="text" name="website" /></div>
+      </div>
+      <div class="field-row">
+        <div><label>Source</label><input type="text" name="source" placeholder="e.g. tender, referral" /></div>
+        <div><label>Tender reference</label><input type="text" name="tender_reference" placeholder="e.g. OBP026/2026/27" /></div>
+      </div>
+      <label>Assign to</label>
+      <select name="assigned_to" class="assign-to-select"></select>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="submit" class="btn btn-primary">Add company</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="modal-add-contact" class="modal hidden">
+    <h2>Add contact</h2>
+    <form id="add-contact-form">
+      <label>Name *</label><input type="text" name="name" required />
+      <div class="field-row">
+        <div><label>Title</label><input type="text" name="title" /></div>
+        <div><label>Phone</label><input type="text" name="phone" /></div>
+      </div>
+      <label>Email</label><input type="email" name="email" />
+      <label class="checkbox-label"><input type="checkbox" name="is_primary" /> Primary contact</label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="submit" class="btn btn-primary">Add contact</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="modal-add-deal" class="modal hidden">
+    <h2>Add deal</h2>
+    <form id="add-deal-form">
+      <label>Company *</label>
+      <select name="company_id" class="company-select" required></select>
+      <label>Deal title *</label><input type="text" name="title" required placeholder="e.g. 200x EDR licenses" />
+      <div class="field-row">
+        <div><label>Value (ZAR)</label><input type="number" name="value" step="0.01" /></div>
+        <div><label>Expected close</label><input type="date" name="expected_close_date" /></div>
+      </div>
+      <label>Stage</label>
+      <select name="stage">
+        <option value="lead">Lead</option>
+        <option value="qualified">Qualified</option>
+        <option value="proposal_sent">Proposal sent</option>
+        <option value="negotiation">Negotiation</option>
+        <option value="won">Won</option>
+        <option value="lost">Lost</option>
+      </select>
+      <label>Assign to</label>
+      <select name="assigned_to" class="assign-to-select"></select>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="submit" class="btn btn-primary">Add deal</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="modal-log-activity" class="modal hidden">
+    <h2>Log activity</h2>
+    <p class="modal-sub" id="log-activity-company-name"></p>
+    <form id="log-activity-form">
+      <label>Type *</label>
+      <select name="type" id="activity-type-select" required>
+        <option value="call">Call</option>
+        <option value="email">Email</option>
+        <option value="meeting">Meeting</option>
+        <option value="note">Note</option>
+      </select>
+      <div id="outcome-field">
+        <label>Outcome *</label>
+        <select name="outcome">
+          <option value="">Select outcome…</option>
+          <option value="no_answer">No answer</option>
+          <option value="callback">Requested callback</option>
+          <option value="interested">Interested</option>
+          <option value="not_interested">Not interested</option>
+          <option value="converted">Converted</option>
+          <option value="wrong_number">Wrong number</option>
+        </select>
+      </div>
+      <label>Notes</label>
+      <textarea name="notes" rows="4" placeholder="What happened?"></textarea>
+      <label>Next follow-up date</label>
+      <input type="date" name="next_follow_up" />
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="modal-add-task" class="modal hidden">
+    <h2>Add task</h2>
+    <form id="add-task-form">
+      <label>Title *</label><input type="text" name="title" required />
+      <label>Description</label><textarea name="description" rows="3"></textarea>
+      <div class="field-row">
+        <div><label>Due date</label><input type="date" name="due_date" /></div>
+        <div><label>Assign to</label><select name="assigned_to" class="assign-to-select"></select></div>
+      </div>
+      <label>Related company</label>
+      <select name="company_id" class="company-select">
+        <option value="">— None —</option>
+      </select>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="submit" class="btn btn-primary">Add task</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="modal-add-user" class="modal hidden">
+    <h2>Add team member</h2>
+    <form id="add-user-form">
+      <label>Name *</label><input type="text" name="name" required />
+      <label>Email *</label><input type="email" name="email" required />
+      <label>Temporary password *</label><input type="text" name="password" required />
+      <label>Role</label>
+      <select name="role">
+        <option value="agent">Agent</option>
+        <option value="manager">Manager</option>
+        <option value="admin">Admin</option>
+      </select>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="submit" class="btn btn-primary">Add member</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="modal-reset-password" class="modal hidden">
+    <h2>Reset password</h2>
+    <p class="modal-sub" id="reset-password-user-name"></p>
+    <form id="reset-password-form">
+      <label>New password *</label><input type="text" name="password" required minlength="6" />
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="submit" class="btn btn-primary">Reset</button>
+      </div>
+    </form>
+  </div>
+
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
