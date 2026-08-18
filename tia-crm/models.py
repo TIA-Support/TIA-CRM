@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
@@ -9,6 +9,11 @@ DEAL_STAGES = ("lead", "qualified", "proposal_sent", "negotiation", "won", "lost
 TASK_STATUSES = ("pending", "done")
 ACTIVITY_TYPES = ("call", "email", "meeting", "note")
 CALL_OUTCOMES = ("no_answer", "callback", "interested", "not_interested", "converted", "wrong_number")
+
+# Fixed service catalogue — a lead/company can be interested in more than one.
+SERVICES = ("cloud", "network_security", "isp", "voip", "it_support", "software", "consumables", "licenses")
+
+ORDER_STATUSES = ("received", "processing", "dispatched", "cancelled")
 
 
 class User(db.Model):
@@ -41,6 +46,8 @@ class Company(db.Model):
     deals = db.relationship("Deal", backref="company", cascade="all, delete-orphan", lazy="dynamic")
     activities = db.relationship("Activity", backref="company", cascade="all, delete-orphan", lazy="dynamic")
     tasks = db.relationship("Task", backref="company", cascade="all, delete-orphan", lazy="dynamic")
+    services = db.relationship("CompanyService", backref="company", cascade="all, delete-orphan", lazy="dynamic")
+    orders = db.relationship("Order", backref="company", cascade="all, delete-orphan", lazy="dynamic")
     assignee = db.relationship("User", foreign_keys=[assigned_to])
 
     def to_dict(self, include_extra=None):
@@ -54,11 +61,24 @@ class Company(db.Model):
             "assigned_to": self.assigned_to,
             "assigned_name": self.assignee.name if self.assignee else None,
             "tender_reference": self.tender_reference,
+            "services": [s.service for s in self.services],
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
         if include_extra:
             d.update(include_extra)
         return d
+
+
+class CompanyService(db.Model):
+    """One row per service a lead/company is interested in — a lightweight many-to-many
+    against the fixed SERVICES catalogue in this file (no separate lookup table needed
+    since the list of services is fixed, not user-editable)."""
+    __tablename__ = "company_services"
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    service = db.Column(db.String(40), nullable=False)
+
+    __table_args__ = (db.UniqueConstraint("company_id", "service", name="uq_company_service"),)
 
 
 class Contact(db.Model):
@@ -164,4 +184,40 @@ class Activity(db.Model):
             "next_follow_up": self.next_follow_up.isoformat() if self.next_follow_up else None,
             "occurred_at": self.occurred_at.isoformat() if self.occurred_at else None,
             "user_id": self.user_id, "user_name": self.user.name if self.user else None,
+        }
+
+
+class Order(db.Model):
+    """A client order — starts as 'received' (came in) and moves through to 'dispatched'
+    (fulfilled/gone out), with 'processing' in between and 'cancelled' as an exit."""
+    __tablename__ = "orders"
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    reference = db.Column(db.String(80))  # optional PO / order number
+    service = db.Column(db.String(40))  # which service/category this order is for
+    description = db.Column(db.Text, nullable=False)
+    quantity = db.Column(db.Integer, default=1)
+    value = db.Column(db.Numeric(12, 2))
+    status = db.Column(db.String(20), nullable=False, default="received")
+    received_at = db.Column(db.Date, default=date.today)
+    dispatched_at = db.Column(db.Date)
+    assigned_to = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    assignee = db.relationship("User", foreign_keys=[assigned_to])
+
+    def to_dict(self):
+        return {
+            "id": self.id, "company_id": self.company_id,
+            "company_name": self.company.name if self.company else None,
+            "reference": self.reference, "service": self.service,
+            "description": self.description, "quantity": self.quantity,
+            "value": float(self.value) if self.value is not None else None,
+            "status": self.status,
+            "received_at": self.received_at.isoformat() if self.received_at else None,
+            "dispatched_at": self.dispatched_at.isoformat() if self.dispatched_at else None,
+            "assigned_to": self.assigned_to,
+            "assigned_name": self.assignee.name if self.assignee else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
