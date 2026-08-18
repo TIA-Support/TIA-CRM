@@ -54,6 +54,7 @@ def create_app():
     from routes.tasks import tasks_bp
     from routes.activities import activities_bp
     from routes.dashboard import dashboard_bp
+    from routes.orders import orders_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(companies_bp)
@@ -61,6 +62,7 @@ def create_app():
     app.register_blueprint(tasks_bp)
     app.register_blueprint(activities_bp)
     app.register_blueprint(dashboard_bp)
+    app.register_blueprint(orders_bp)
 
     @app.route("/")
     def index():
