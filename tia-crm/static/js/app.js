@@ -4,6 +4,8 @@ const STATUS_LABELS = { new: "New", contacted: "Contacted", interested: "Interes
 const STAGE_LABELS = { lead: "Lead", qualified: "Qualified", proposal_sent: "Proposal sent", negotiation: "Negotiation", won: "Won", lost: "Lost" };
 const OUTCOME_LABELS = { no_answer: "No answer", callback: "Requested callback", interested: "Interested", not_interested: "Not interested", converted: "Converted", wrong_number: "Wrong number" };
 const ACTIVITY_TYPE_LABELS = { call: "Call", email: "Email", meeting: "Meeting", note: "Note" };
+const SERVICE_LABELS = { cloud: "Cloud", network_security: "Network & Cyber Security", isp: "ISP", voip: "VoIP", it_support: "IT Support", software: "Software", consumables: "Computer Consumables", licenses: "Licenses" };
+const ORDER_STATUS_LABELS = { received: "Received", processing: "Processing", dispatched: "Dispatched", cancelled: "Cancelled" };
 
 // ---------- API ----------
 async function api(path, options = {}) {
@@ -62,6 +64,7 @@ function navigate(view) {
   if (view === "dashboard") loadDashboard();
   if (view === "companies") loadCompanies();
   if (view === "pipeline") loadPipeline();
+  if (view === "orders") loadOrders();
   if (view === "tasks") loadTasks();
   if (view === "team") loadTeam();
 }
@@ -122,15 +125,89 @@ async function loadDashboard() {
           <span class="lb-count">${r.calls_made}</span>
         </div>`).join("")
     : `<div class="empty-state">No calls logged yet this month.</div>`;
+
+  await loadReminders();
+}
+
+// ---------- Dashboard: needs-attention (tasks + follow-ups) ----------
+const REMINDER_WHEN_LABEL = { overdue: "Overdue", today: "Today", soon: "Soon" };
+
+function reminderWhenText(item) {
+  if (item.urgency === "overdue") return "Overdue";
+  if (item.urgency === "today") return "Today";
+  return formatDate(item.due_date || item.next_follow_up);
+}
+
+async function loadReminders() {
+  const r = await api("/api/dashboard/reminders");
+
+  const taskEl = document.getElementById("reminder-tasks");
+  taskEl.innerHTML = r.tasks.length ? r.tasks.map((t) => `
+    <div class="reminder-row" data-task-company="${t.company_id || ""}">
+      <input type="checkbox" data-reminder-task-toggle="${t.id}" />
+      <span class="reminder-dot ${t.urgency}" title="${REMINDER_WHEN_LABEL[t.urgency]}"></span>
+      <div class="reminder-main">
+        <div class="reminder-title">${escapeHtml(t.title)}</div>
+        <div class="reminder-meta">${t.company_name ? escapeHtml(t.company_name) : "No company"}${t.assigned_name ? " · " + escapeHtml(t.assigned_name) : ""}</div>
+      </div>
+      <span class="reminder-when ${t.urgency}">${reminderWhenText(t)}</span>
+    </div>
+  `).join("") : `<div class="empty-state">Nothing due in the next 7 days.</div>`;
+
+  taskEl.querySelectorAll("[data-reminder-task-toggle]").forEach((cb) => {
+    cb.addEventListener("click", (e) => e.stopPropagation());
+    cb.addEventListener("change", async (e) => {
+      e.stopPropagation();
+      await api(`/api/tasks/${cb.dataset.reminderTaskToggle}`, { method: "PUT", body: JSON.stringify({ status: "done" }) });
+      loadReminders();
+    });
+  });
+  taskEl.querySelectorAll(".reminder-row").forEach((row) => {
+    row.addEventListener("click", () => {
+      if (row.dataset.taskCompany) openCompanyDetail(row.dataset.taskCompany);
+    });
+  });
+
+  const followEl = document.getElementById("reminder-followups");
+  followEl.innerHTML = r.followups.length ? r.followups.map((a) => `
+    <div class="reminder-row" data-followup-company="${a.company_id}">
+      <span class="reminder-dot ${a.urgency}" title="${REMINDER_WHEN_LABEL[a.urgency]}"></span>
+      <div class="reminder-main">
+        <div class="reminder-title">${escapeHtml(a.company_name || "")}</div>
+        <div class="reminder-meta">${a.contact_name ? escapeHtml(a.contact_name) + " · " : ""}${ACTIVITY_TYPE_LABELS[a.type] || ""}${a.user_name ? " · " + escapeHtml(a.user_name) : ""}</div>
+      </div>
+      <span class="reminder-when ${a.urgency}">${reminderWhenText({ urgency: a.urgency, due_date: a.next_follow_up })}</span>
+    </div>
+  `).join("") : `<div class="empty-state">No follow-ups due soon.</div>`;
+
+  followEl.querySelectorAll(".reminder-row").forEach((row) => {
+    row.addEventListener("click", () => openCompanyDetail(row.dataset.followupCompany));
+  });
+}
+
+// ---------- Services (shared helper for checkbox groups + chips) ----------
+function renderServiceCheckboxes(containerId, checked = []) {
+  document.getElementById(containerId).innerHTML = Object.keys(SERVICE_LABELS).map((key) => `
+    <label class="checkbox-label">
+      <input type="checkbox" name="services" value="${key}" ${checked.includes(key) ? "checked" : ""} />
+      ${escapeHtml(SERVICE_LABELS[key])}
+    </label>
+  `).join("");
+}
+function serviceChips(services) {
+  if (!services || !services.length) return "";
+  return `<div class="service-chips">${services.map((s) => `<span class="service-chip">${escapeHtml(SERVICE_LABELS[s] || s)}</span>`).join("")}</div>`;
 }
 
 // ---------- Companies list ----------
 async function loadCompanies() {
   const search = document.getElementById("company-search").value;
   const status = document.getElementById("status-filter").value;
+  const service = document.getElementById("service-filter").value;
   const params = new URLSearchParams();
   if (search) params.set("search", search);
   if (status) params.set("status", status);
+  if (service) params.set("service", service);
 
   const companies = await api(`/api/companies?${params.toString()}`);
   state.companiesCache = companies;
@@ -138,7 +215,7 @@ async function loadCompanies() {
   const tbody = document.querySelector("#companies-table tbody");
 
   if (!companies.length) {
-    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">No companies yet — add your first lead.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">No companies yet — add your first lead.</div></td></tr>`;
     return;
   }
 
@@ -149,6 +226,7 @@ async function loadCompanies() {
     <tr class="clickable" data-id="${c.id}">
       <td><strong>${escapeHtml(c.name)}</strong></td>
       <td>${escapeHtml(c.industry || "—")}</td>
+      <td>${serviceChips(c.services) || "—"}</td>
       <td><span class="status-chip status-${c.status}">${STATUS_LABELS[c.status]}</span></td>
       <td>${escapeHtml(c.assigned_name || "—")}</td>
       <td class="mono">${c.contact_count}</td>
@@ -162,6 +240,7 @@ async function loadCompanies() {
 
 document.getElementById("company-search").addEventListener("input", debounce(loadCompanies, 300));
 document.getElementById("status-filter").addEventListener("change", loadCompanies);
+document.getElementById("service-filter").addEventListener("change", loadCompanies);
 
 function populateCompanySelects(companies) {
   document.querySelectorAll(".company-select").forEach((select) => {
@@ -193,10 +272,15 @@ async function renderCompanyDetail() {
           ${c.tender_reference ? `<span class="mono">Ref: ${escapeHtml(c.tender_reference)}</span>` : ""}
           <span><span class="status-chip status-${c.status}">${STATUS_LABELS[c.status]}</span></span>
         </div>
+        <div class="detail-services">
+          ${serviceChips(c.services)}
+          <button class="link-btn" id="edit-services-btn">${c.services.length ? "Edit services" : "+ Add services"}</button>
+        </div>
       </div>
       <div class="detail-actions">
         <button class="btn btn-ghost" id="add-contact-btn">+ Contact</button>
         <button class="btn btn-ghost" id="add-deal-inline-btn">+ Deal</button>
+        <button class="btn btn-ghost" id="add-order-inline-btn">+ Order</button>
         <button class="btn btn-primary" id="log-activity-btn">+ Log activity</button>
       </div>
     </div>
@@ -221,6 +305,7 @@ async function renderCompanyDetail() {
         <div class="tab-bar">
           <button class="tab-btn ${state.activeTab === "activities" ? "active" : ""}" data-tab="activities">Activity (${c.activities.length})</button>
           <button class="tab-btn ${state.activeTab === "deals" ? "active" : ""}" data-tab="deals">Deals (${c.deals.length})</button>
+          <button class="tab-btn ${state.activeTab === "orders" ? "active" : ""}" data-tab="orders">Orders (${c.orders.length})</button>
           <button class="tab-btn ${state.activeTab === "tasks" ? "active" : ""}" data-tab="tasks">Tasks (${c.tasks.length})</button>
         </div>
         <div class="tab-panel" id="tab-panel-content"></div>
@@ -250,6 +335,17 @@ async function renderCompanyDetail() {
     populateCompanySelects(state.companiesCache.length ? state.companiesCache : [c]);
     document.querySelector('#modal-add-deal select[name="company_id"]').value = c.id;
     openModal("modal-add-deal");
+  });
+  document.getElementById("add-order-inline-btn").addEventListener("click", () => {
+    populateCompanySelects(state.companiesCache.length ? state.companiesCache : [c]);
+    document.querySelector('#modal-add-order select[name="company_id"]').value = c.id;
+    openModal("modal-add-order");
+  });
+  document.getElementById("edit-services-btn").addEventListener("click", () => {
+    document.getElementById("edit-services-company-name").textContent = c.name;
+    document.getElementById("edit-services-form").dataset.companyId = c.id;
+    renderServiceCheckboxes("edit-company-services", c.services);
+    openModal("modal-edit-services");
   });
 }
 
@@ -286,6 +382,31 @@ function renderTabPanel(c) {
         ${t.description ? `<div class="activity-entry-notes">${escapeHtml(t.description)}</div>` : ""}
       </div>
     `).join("") : `<div class="empty-state">No tasks yet.</div>`;
+  } else if (state.activeTab === "orders") {
+    panel.innerHTML = c.orders.length ? c.orders.map((o) => `
+      <div class="deal-card">
+        <div class="deal-card-head">
+          <span class="deal-title">${escapeHtml(o.description)}${o.reference ? ` <span class="mono" style="font-weight:400;color:var(--ink-soft)">· ${escapeHtml(o.reference)}</span>` : ""}</span>
+          <span class="deal-value">${o.value != null ? formatCurrency(o.value) : "—"}</span>
+        </div>
+        <div class="deal-meta">
+          ${o.service ? `<span class="stage-pill">${escapeHtml(SERVICE_LABELS[o.service] || o.service)}</span> · ` : ""}
+          Qty ${o.quantity} · Received ${formatDate(o.received_at)}${o.dispatched_at ? " · Dispatched " + formatDate(o.dispatched_at) : ""}
+        </div>
+        <div style="margin-top:8px; display:flex; align-items:center; justify-content:space-between;">
+          <span class="order-status-chip order-status-${o.status}">${ORDER_STATUS_LABELS[o.status]}</span>
+          <select data-order-status-select="${o.id}" style="width:auto; padding:4px 8px; font-size:12px;">
+            ${Object.keys(ORDER_STATUS_LABELS).map((s) => `<option value="${s}" ${s === o.status ? "selected" : ""}>${ORDER_STATUS_LABELS[s]}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+    `).join("") : `<div class="empty-state">No orders yet.</div>`;
+    panel.querySelectorAll("[data-order-status-select]").forEach((select) => {
+      select.addEventListener("change", async () => {
+        await api(`/api/orders/${select.dataset.orderStatusSelect}`, { method: "PUT", body: JSON.stringify({ status: select.value }) });
+        renderCompanyDetail();
+      });
+    });
   }
 }
 
@@ -380,6 +501,44 @@ async function loadTasks() {
 }
 document.getElementById("task-status-filter").addEventListener("change", loadTasks);
 
+async function loadOrders() {
+  const status = document.getElementById("order-status-filter").value;
+  const service = document.getElementById("order-service-filter").value;
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (service) params.set("service", service);
+  const orders = await api(`/api/orders?${params.toString()}`);
+
+  const tbody = document.querySelector("#orders-table tbody");
+  tbody.innerHTML = orders.length ? orders.map((o) => `
+    <tr>
+      <td><strong>${escapeHtml(o.description)}</strong>${o.reference ? `<div class="mono" style="font-size:11px;color:var(--ink-soft)">${escapeHtml(o.reference)}</div>` : ""}</td>
+      <td>${escapeHtml(o.company_name || "—")}</td>
+      <td>${o.service ? escapeHtml(SERVICE_LABELS[o.service] || o.service) : "—"}</td>
+      <td class="mono">${o.quantity}</td>
+      <td class="mono">${o.value != null ? formatCurrency(o.value) : "—"}</td>
+      <td>${formatDate(o.received_at)}</td>
+      <td>
+        <select data-order-list-status="${o.id}" style="width:auto; padding:4px 8px; font-size:12px;">
+          ${Object.keys(ORDER_STATUS_LABELS).map((s) => `<option value="${s}" ${s === o.status ? "selected" : ""}>${ORDER_STATUS_LABELS[s]}</option>`).join("")}
+        </select>
+      </td>
+      <td><button class="btn btn-ghost btn-sm" data-delete-order="${o.id}">Delete</button></td>
+    </tr>`).join("") : `<tr><td colspan="8"><div class="empty-state">No orders yet.</div></td></tr>`;
+
+  tbody.querySelectorAll("[data-order-list-status]").forEach((select) => select.addEventListener("change", async () => {
+    await api(`/api/orders/${select.dataset.orderListStatus}`, { method: "PUT", body: JSON.stringify({ status: select.value }) });
+    loadOrders();
+  }));
+  tbody.querySelectorAll("[data-delete-order]").forEach((btn) => btn.addEventListener("click", async () => {
+    if (!confirm("Delete this order?")) return;
+    await api(`/api/orders/${btn.dataset.deleteOrder}`, { method: "DELETE" });
+    loadOrders();
+  }));
+}
+document.getElementById("order-status-filter").addEventListener("change", loadOrders);
+document.getElementById("order-service-filter").addEventListener("change", loadOrders);
+
 // ---------- Modals ----------
 function openModal(id) {
   document.getElementById("modal-backdrop").classList.remove("hidden");
@@ -390,17 +549,37 @@ function closeModals() { document.getElementById("modal-backdrop").classList.add
 document.querySelectorAll("[data-close-modal]").forEach((btn) => btn.addEventListener("click", closeModals));
 document.getElementById("modal-backdrop").addEventListener("click", (e) => { if (e.target.id === "modal-backdrop") closeModals(); });
 
-document.getElementById("add-company-btn").addEventListener("click", () => openModal("modal-add-company"));
+document.getElementById("add-company-btn").addEventListener("click", () => {
+  renderServiceCheckboxes("add-company-services");
+  openModal("modal-add-company");
+});
 document.getElementById("add-deal-btn").addEventListener("click", () => openModal("modal-add-deal"));
 document.getElementById("add-task-btn").addEventListener("click", () => openModal("modal-add-task"));
 document.getElementById("add-user-btn").addEventListener("click", () => openModal("modal-add-user"));
+document.getElementById("add-order-btn").addEventListener("click", async () => {
+  populateCompanySelects(state.companiesCache.length ? state.companiesCache : await api("/api/companies"));
+  openModal("modal-add-order");
+});
 
 document.getElementById("add-company-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = e.target;
-  const payload = Object.fromEntries(new FormData(form).entries());
+  const fd = new FormData(form);
+  const payload = Object.fromEntries(fd.entries());
+  payload.services = fd.getAll("services");
   try { await api("/api/companies", { method: "POST", body: JSON.stringify(payload) }); closeModals(); form.reset(); loadCompanies(); }
   catch (err) { alert(err.message); }
+});
+
+document.getElementById("edit-services-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const services = new FormData(form).getAll("services");
+  try {
+    await api(`/api/companies/${form.dataset.companyId}`, { method: "PUT", body: JSON.stringify({ services }) });
+    closeModals(); renderCompanyDetail();
+    if (!document.getElementById("view-companies").classList.contains("hidden")) loadCompanies();
+  } catch (err) { alert(err.message); }
 });
 
 document.getElementById("add-contact-form").addEventListener("submit", async (e) => {
@@ -448,6 +627,22 @@ document.getElementById("add-task-form").addEventListener("submit", async (e) =>
     await api("/api/tasks", { method: "POST", body: JSON.stringify(payload) });
     closeModals(); form.reset();
     if (!document.getElementById("view-tasks").classList.contains("hidden")) loadTasks();
+  } catch (err) { alert(err.message); }
+});
+
+document.getElementById("add-order-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const payload = Object.fromEntries(new FormData(form).entries());
+  if (payload.service === "") delete payload.service;
+  if (payload.reference === "") delete payload.reference;
+  if (payload.value === "") delete payload.value;
+  if (payload.received_at === "") delete payload.received_at;
+  try {
+    await api("/api/orders", { method: "POST", body: JSON.stringify(payload) });
+    closeModals(); form.reset();
+    if (!document.getElementById("view-orders").classList.contains("hidden")) loadOrders();
+    if (state.currentCompanyId && !document.getElementById("view-company-detail").classList.contains("hidden")) renderCompanyDetail();
   } catch (err) { alert(err.message); }
 });
 
