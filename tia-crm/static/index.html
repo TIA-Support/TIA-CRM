@@ -34,6 +34,7 @@
       <button class="nav-item active" data-view="dashboard">Dashboard</button>
       <button class="nav-item" data-view="companies">Companies</button>
       <button class="nav-item" data-view="pipeline">Pipeline</button>
+      <button class="nav-item" data-view="orders">Orders</button>
       <button class="nav-item" data-view="tasks">Tasks</button>
       <button class="nav-item" data-view="team" id="nav-team">Team</button>
     </nav>
@@ -52,6 +53,21 @@
     <section id="view-dashboard" class="view">
       <header class="view-header"><h1>Dashboard</h1><p class="eyebrow" id="today-date"></p></header>
       <div class="stat-grid" id="stat-grid"></div>
+
+      <div class="panel reminders-panel">
+        <h3>Needs attention</h3>
+        <div class="reminders-grid">
+          <div>
+            <h4 class="reminders-subhead">Tasks</h4>
+            <div id="reminder-tasks" class="reminders-list"></div>
+          </div>
+          <div>
+            <h4 class="reminders-subhead">Follow-ups</h4>
+            <div id="reminder-followups" class="reminders-list"></div>
+          </div>
+        </div>
+      </div>
+
       <div class="panel-grid">
         <div class="panel">
           <h3>Pipeline by stage</h3>
@@ -81,10 +97,21 @@
           <option value="customer">Customer</option>
           <option value="do_not_contact">Do not contact</option>
         </select>
+        <select id="service-filter">
+          <option value="">All services</option>
+          <option value="cloud">Cloud</option>
+          <option value="network_security">Network &amp; Cyber Security</option>
+          <option value="isp">ISP</option>
+          <option value="voip">VoIP</option>
+          <option value="it_support">IT Support</option>
+          <option value="software">Software</option>
+          <option value="consumables">Computer Consumables</option>
+          <option value="licenses">Licenses</option>
+        </select>
       </div>
       <div class="table-wrap">
         <table id="companies-table">
-          <thead><tr><th>Company</th><th>Industry</th><th>Status</th><th>Assigned</th><th>Contacts</th><th>Open deals</th><th>Next task</th></tr></thead>
+          <thead><tr><th>Company</th><th>Industry</th><th>Services</th><th>Status</th><th>Assigned</th><th>Contacts</th><th>Open deals</th><th>Next task</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -126,6 +153,40 @@
       </div>
     </section>
 
+    <!-- Orders -->
+    <section id="view-orders" class="view hidden">
+      <header class="view-header">
+        <h1>Orders</h1>
+        <button class="btn btn-primary" id="add-order-btn">+ Add order</button>
+      </header>
+      <div class="toolbar">
+        <select id="order-status-filter">
+          <option value="">All statuses</option>
+          <option value="received">Received</option>
+          <option value="processing">Processing</option>
+          <option value="dispatched">Dispatched</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+        <select id="order-service-filter">
+          <option value="">All services</option>
+          <option value="cloud">Cloud</option>
+          <option value="network_security">Network &amp; Cyber Security</option>
+          <option value="isp">ISP</option>
+          <option value="voip">VoIP</option>
+          <option value="it_support">IT Support</option>
+          <option value="software">Software</option>
+          <option value="consumables">Computer Consumables</option>
+          <option value="licenses">Licenses</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table id="orders-table">
+          <thead><tr><th>Order</th><th>Company</th><th>Service</th><th>Qty</th><th>Value</th><th>Received</th><th>Status</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- Team -->
     <section id="view-team" class="view hidden">
       <header class="view-header">
@@ -152,9 +213,11 @@
         <div><label>Website</label><input type="text" name="website" /></div>
       </div>
       <div class="field-row">
-        <div><label>Source</label><input type="text" name="source" placeholder="e.g. tender, referral" /></div>
+        <div><label>Source</label><input type="text" name="source" placeholder="e.g. cold call, networking event, inbound" /></div>
         <div><label>Tender reference</label><input type="text" name="tender_reference" placeholder="e.g. OBP026/2026/27" /></div>
       </div>
+      <label>Services interested in</label>
+      <div class="checkbox-group" id="add-company-services"></div>
       <label>Assign to</label>
       <select name="assigned_to" class="assign-to-select"></select>
       <div class="modal-actions">
@@ -177,6 +240,18 @@
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
         <button type="submit" class="btn btn-primary">Add contact</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="modal-edit-services" class="modal hidden">
+    <h2>Services</h2>
+    <p class="modal-sub" id="edit-services-company-name"></p>
+    <form id="edit-services-form">
+      <div class="checkbox-group" id="edit-company-services"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
   </div>
@@ -259,6 +334,50 @@
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
         <button type="submit" class="btn btn-primary">Add task</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="modal-add-order" class="modal hidden">
+    <h2>Add order</h2>
+    <form id="add-order-form">
+      <label>Company *</label>
+      <select name="company_id" class="company-select" required></select>
+      <label>Description *</label><textarea name="description" rows="2" placeholder="e.g. 50x toner cartridges, 10x M365 Business licenses" required></textarea>
+      <div class="field-row">
+        <div><label>Service</label>
+          <select name="service">
+            <option value="">— None —</option>
+            <option value="cloud">Cloud</option>
+            <option value="network_security">Network &amp; Cyber Security</option>
+            <option value="isp">ISP</option>
+            <option value="voip">VoIP</option>
+            <option value="it_support">IT Support</option>
+            <option value="software">Software</option>
+            <option value="consumables">Computer Consumables</option>
+            <option value="licenses">Licenses</option>
+          </select>
+        </div>
+        <div><label>Reference / PO number</label><input type="text" name="reference" /></div>
+      </div>
+      <div class="field-row">
+        <div><label>Quantity</label><input type="number" name="quantity" min="1" value="1" /></div>
+        <div><label>Value (ZAR)</label><input type="number" name="value" step="0.01" /></div>
+      </div>
+      <div class="field-row">
+        <div><label>Received date</label><input type="date" name="received_at" /></div>
+        <div><label>Status</label>
+          <select name="status">
+            <option value="received">Received</option>
+            <option value="processing">Processing</option>
+            <option value="dispatched">Dispatched</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="submit" class="btn btn-primary">Add order</button>
       </div>
     </form>
   </div>
