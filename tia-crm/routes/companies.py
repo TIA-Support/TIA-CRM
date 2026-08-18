@@ -1,9 +1,20 @@
 from flask import Blueprint, request, jsonify, session
 from sqlalchemy import or_
-from models import db, Company, Contact, Deal, Task, Activity, COMPANY_STATUSES
+from models import db, Company, Contact, Deal, Task, Activity, CompanyService, Order, COMPANY_STATUSES, SERVICES
 from routes.auth import login_required, can_see_all, current_user_id
 
 companies_bp = Blueprint("companies", __name__)
+
+
+def _set_services(company, services):
+    """Replace a company's service set. Silently drops anything not in the fixed catalogue
+    rather than erroring, so a stray/old value in the payload doesn't block the whole save."""
+    if services is None:
+        return
+    CompanyService.query.filter_by(company_id=company.id).delete()
+    for s in services:
+        if s in SERVICES:
+            db.session.add(CompanyService(company_id=company.id, service=s))
 
 
 @companies_bp.route("/api/companies", methods=["GET"])
@@ -28,6 +39,10 @@ def list_companies():
     if search:
         like = f"%{search}%"
         query = query.filter(or_(Company.name.ilike(like), Company.industry.ilike(like)))
+
+    service = request.args.get("service")
+    if service:
+        query = query.join(CompanyService).filter(CompanyService.service == service)
 
     companies = query.order_by(Company.created_at.desc()).all()
 
@@ -60,6 +75,7 @@ def get_company(company_id):
     d["deals"] = [dl.to_dict() for dl in company.deals.order_by(Deal.created_at.desc())]
     d["tasks"] = [t.to_dict() for t in company.tasks.order_by(Task.due_date)]
     d["activities"] = [a.to_dict() for a in company.activities.order_by(Activity.occurred_at.desc())]
+    d["orders"] = [o.to_dict() for o in company.orders.order_by(Order.received_at.desc())]
     return jsonify(d)
 
 
@@ -82,6 +98,8 @@ def create_company():
         tender_reference=data.get("tender_reference"),
     )
     db.session.add(company)
+    db.session.flush()  # assigns company.id without a full commit, so services can reference it
+    _set_services(company, data.get("services"))
     db.session.commit()
     return jsonify(company.to_dict()), 201
 
@@ -99,6 +117,8 @@ def update_company(company_id):
             setattr(company, field, data[field])
     if "status" in data and data["status"] in COMPANY_STATUSES:
         company.status = data["status"]
+    if "services" in data:
+        _set_services(company, data["services"])
 
     db.session.commit()
     return jsonify(company.to_dict())
