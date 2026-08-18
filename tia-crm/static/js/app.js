@@ -10,8 +10,11 @@ const ORDER_STATUS_LABELS = { received: "Received", processing: "Processing", di
 // ---------- API ----------
 async function api(path, options = {}) {
   const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
-  if (res.status === 401) { showLogin(); throw new Error("Not authenticated"); }
   const data = await res.json().catch(() => ({}));
+  // A 401 on any other endpoint means the session expired mid-use — bounce to login.
+  // A 401 on the login endpoint itself just means wrong credentials; don't mask that as
+  // a session problem, and don't bother re-showing the login screen we're already on.
+  if (res.status === 401 && path !== "/api/auth/login") { showLogin(); throw new Error(data.error || "Not authenticated"); }
   if (!res.ok) throw new Error(data.error || "Request failed");
   return data;
 }
