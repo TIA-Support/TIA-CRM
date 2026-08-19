@@ -144,6 +144,16 @@ function reminderWhenText(item) {
 async function loadReminders() {
   const r = await api("/api/dashboard/reminders");
 
+  const allItems = [...r.tasks, ...r.followups];
+  const worst = allItems.some((i) => i.urgency === "overdue") ? "overdue"
+    : allItems.some((i) => i.urgency === "today") ? "today"
+    : allItems.length ? "soon" : "clear";
+  const panel = document.getElementById("reminders-panel");
+  panel.classList.remove("urgency-overdue", "urgency-today", "urgency-soon", "urgency-clear");
+  panel.classList.add(`urgency-${worst}`);
+  document.getElementById("reminders-badge").textContent =
+    allItems.length ? `${allItems.length} item${allItems.length !== 1 ? "s" : ""}` : "All clear";
+
   const taskEl = document.getElementById("reminder-tasks");
   taskEl.innerHTML = r.tasks.length ? r.tasks.map((t) => `
     <div class="reminder-row" data-task-company="${t.company_id || ""}">
