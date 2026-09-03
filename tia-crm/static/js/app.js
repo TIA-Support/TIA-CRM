@@ -107,12 +107,41 @@ async function loadDashboard() {
   document.getElementById("today-date").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
   const s = await api("/api/dashboard/summary");
 
-  document.getElementById("stat-grid").innerHTML = `
-    <div class="stat-card"><div class="num">${s.calls_today}</div><div class="label">Calls today</div></div>
-    <div class="stat-card ${s.followups_due > 0 ? "alert" : ""}"><div class="num">${s.followups_due}</div><div class="label">Follow-ups due</div></div>
-    <div class="stat-card ${s.tasks_due_today > 0 ? "alert" : ""}"><div class="num">${s.tasks_due_today}</div><div class="label">Tasks due today</div></div>
-    <div class="stat-card accent"><div class="num">${formatCurrency(s.pipeline_value)}</div><div class="label">Open pipeline (${s.open_deal_count} deals)</div></div>
+  // Weekday bar chart (new leads Mon–Fri, real created_at data)
+  const weekdays = s.new_leads_by_weekday || [];
+  const maxLeads = Math.max(1, ...weekdays.map((d) => d.count));
+  document.getElementById("weekday-bars").innerHTML = weekdays.map((d) => `
+    <div class="bar-chart-bar ${d.count > 0 ? "has-value" : ""}" style="height:${Math.max(6, (d.count / maxLeads) * 100)}%" title="${d.day}: ${d.count}"></div>
+  `).join("");
+
+  // Win-rate gauge
+  const gauge = document.getElementById("win-gauge");
+  gauge.style.setProperty("--pct", s.win_rate);
+  document.getElementById("win-rate-pct").textContent = `${s.win_rate}%`;
+  document.getElementById("win-rate-caption").textContent =
+    (s.won_count + s.lost_count) > 0 ? `${s.won_count} won · ${s.lost_count} lost` : "No decided deals yet";
+
+  // Big-number hero stats (clickable, real navigation)
+  document.getElementById("hero-tasks-num").textContent = s.tasks_due_today;
+  document.getElementById("hero-pipeline-num").textContent = formatCurrency(s.pipeline_value);
+  document.getElementById("hero-pipeline-label").textContent = `Open pipeline (${s.open_deal_count} deals)`;
+
+  // Secondary stats as small pills
+  document.getElementById("mini-stat-row").innerHTML = `
+    <div class="mini-stat">
+      <span class="mini-stat-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h4l1.8 4.5-2.3 1.7a11.5 11.5 0 0 0 5.3 5.3l1.7-2.3L19 15v4a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 2 4.2 2 2 0 0 1 4 4Z"/></svg></span>
+      <span class="mini-stat-num">${s.calls_today}</span><span class="mini-stat-label">Calls today</span>
+    </div>
+    <div class="mini-stat ${s.followups_due > 0 ? "alert" : ""}">
+      <span class="mini-stat-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></span>
+      <span class="mini-stat-num">${s.followups_due}</span><span class="mini-stat-label">Follow-ups due</span>
+    </div>
   `;
+
+  // Tasks nav badge
+  const badge = document.getElementById("nav-tasks-badge");
+  badge.textContent = s.tasks_due_today > 0 ? s.tasks_due_today : "";
+  badge.classList.toggle("hidden", s.tasks_due_today === 0);
 
   document.getElementById("stage-breakdown").innerHTML = Object.keys(STAGE_LABELS).map((stg) => `
     <div class="status-row"><span class="stage-pill">${STAGE_LABELS[stg]}</span><span class="count">${s.stage_breakdown[stg] || 0}</span></div>
@@ -131,6 +160,9 @@ async function loadDashboard() {
 
   await loadReminders();
 }
+
+document.getElementById("hero-stat-tasks").addEventListener("click", () => navigate("tasks"));
+document.getElementById("hero-stat-pipeline").addEventListener("click", () => navigate("pipeline"));
 
 // ---------- Dashboard: needs-attention (tasks + follow-ups) ----------
 const REMINDER_WHEN_LABEL = { overdue: "Overdue", today: "Today", soon: "Soon" };
@@ -440,27 +472,46 @@ function onActivityTypeChange() {
 document.getElementById("activity-type-select").addEventListener("change", onActivityTypeChange);
 
 // ---------- Pipeline (kanban) ----------
+const SORT_ICON = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M7 4 3.5 7.5M7 4l3.5 3.5M17 20V4m0 16 3.5-3.5M17 20l-3.5-3.5"/></svg>`;
+const CALENDAR_ICON = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M8 2.5v4M16 2.5v4M3.5 9.5h17"/></svg>`;
+
 async function loadPipeline() {
   await loadUsers();
   populateCompanySelects(state.companiesCache.length ? state.companiesCache : await api("/api/companies"));
   const board = await api("/api/pipeline");
   const kanban = document.getElementById("kanban-board");
 
-  kanban.innerHTML = Object.keys(STAGE_LABELS).filter((s) => s !== "won" && s !== "lost").concat(["won", "lost"]).map((stage) => `
+  // Feature the single highest-value deal on the whole board, if any has a value —
+  // a real "which one matters most" signal, not decoration.
+  const allDeals = Object.values(board).flat();
+  const featuredId = allDeals.length
+    ? allDeals.reduce((best, d) => (d.value != null && (best == null || d.value > best.value) ? d : best), null)?.id
+    : null;
+
+  kanban.innerHTML = Object.keys(STAGE_LABELS).filter((s) => s !== "won" && s !== "lost").concat(["won", "lost"]).map((stage) => {
+    const deals = board[stage] || [];
+    return `
     <div class="kanban-col">
-      <h4>${STAGE_LABELS[stage]} <span class="count">${(board[stage] || []).length}</span></h4>
-      ${(board[stage] || []).map((d) => `
-        <div class="kanban-card" data-deal-id="${d.id}" data-company-id="${d.company_id}">
+      <div class="kanban-col-head">
+        <h4>${STAGE_LABELS[stage]}</h4>
+        <span class="kanban-count-pill">${deals.length} ${SORT_ICON}</span>
+      </div>
+      ${deals.map((d) => `
+        <div class="kanban-card ${d.id === featuredId ? "featured" : ""}" data-deal-id="${d.id}" data-company-id="${d.company_id}">
           <div class="kc-title">${escapeHtml(d.title)}</div>
-          <div class="kc-company">${escapeHtml(d.company_name || "")}</div>
-          ${d.value != null ? `<div class="kc-value">${formatCurrency(d.value)}</div>` : ""}
+          <div class="kc-company">${escapeHtml(d.company_name || "")}${d.assigned_name ? ` · ${escapeHtml(d.assigned_name)}` : ""}</div>
+          <div class="kc-footer">
+            <span class="kc-date-pill">${CALENDAR_ICON} ${d.expected_close_date ? formatDate(d.expected_close_date) : "No due date"}</span>
+            ${d.value != null ? `<span class="kc-value">${formatCurrency(d.value)}</span>` : ""}
+          </div>
           <select data-stage-select="${d.id}">
             ${Object.keys(STAGE_LABELS).map((s) => `<option value="${s}" ${s === d.stage ? "selected" : ""}>${STAGE_LABELS[s]}</option>`).join("")}
           </select>
         </div>
       `).join("")}
     </div>
-  `).join("");
+  `;
+  }).join("");
 
   kanban.querySelectorAll(".kanban-card").forEach((card) => {
     card.addEventListener("click", (e) => {
@@ -477,9 +528,6 @@ async function loadPipeline() {
     });
   });
 }
-
-// won/lost stages need their own tinted columns — but note board still only returns non-closed deals by default;
-// won/lost columns will simply show empty unless the API is called with them included, which is fine for a working board.
 
 // ---------- Tasks ----------
 async function loadTasks() {
