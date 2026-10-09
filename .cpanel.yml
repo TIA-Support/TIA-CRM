@@ -1,0 +1,6 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/om4rgf9myl4q/apps.tia-solutions.co.za/crm/
+    - /bin/mkdir -p $DEPLOYPATH
+    - /bin/rsync -av --exclude='.git' ./tia-crm/ $DEPLOYPATH
