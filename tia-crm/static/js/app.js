@@ -89,9 +89,22 @@ async function loadTeam() {
       <td>${escapeHtml(u.name)}</td>
       <td class="mono">${escapeHtml(u.email)}</td>
       <td style="text-transform:capitalize">${u.role}</td>
-      <td>${isAdmin ? `<button class="btn btn-ghost btn-sm" data-reset="${u.id}" data-name="${escapeHtml(u.name)}">Reset password</button>` : ""}</td>
+      <td>${isAdmin ? `<button class="btn btn-ghost btn-sm" data-edit-user="${u.id}">Edit</button> <button class="btn btn-ghost btn-sm" data-reset="${u.id}" data-name="${escapeHtml(u.name)}">Reset password</button>` : ""}</td>
     </tr>
   `).join("");
+
+  document.querySelectorAll("[data-edit-user]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const u = state.users.find((x) => String(x.id) === btn.dataset.editUser);
+      if (!u) return;
+      const form = document.getElementById("edit-user-form");
+      form.dataset.userId = u.id;
+      form.elements.name.value = u.name;
+      form.elements.email.value = u.email;
+      form.elements.role.value = u.role;
+      openModal("modal-edit-user");
+    });
+  });
 
   document.querySelectorAll("[data-reset]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -323,6 +336,7 @@ async function renderCompanyDetail() {
         </div>
       </div>
       <div class="detail-actions">
+        <button class="btn btn-ghost" id="edit-company-btn">Edit company</button>
         <button class="btn btn-ghost" id="add-contact-btn">+ Contact</button>
         <button class="btn btn-ghost" id="add-deal-inline-btn">+ Deal</button>
         <button class="btn btn-ghost" id="add-order-inline-btn">+ Order</button>
@@ -371,6 +385,23 @@ async function renderCompanyDetail() {
     document.getElementById("log-activity-form").dataset.companyId = c.id;
     onActivityTypeChange();
     openModal("modal-log-activity");
+  });
+  document.getElementById("edit-company-btn").addEventListener("click", () => {
+    const form = document.getElementById("edit-company-form");
+    form.dataset.companyId = c.id;
+    form.elements.name.value = c.name || "";
+    form.elements.industry.value = c.industry || "";
+    form.elements.website.value = c.website || "";
+    form.elements.source.value = c.source || "";
+    form.elements.tender_reference.value = c.tender_reference || "";
+    form.elements.status.value = c.status;
+    // Own dropdown (not the shared .assign-to-select) so a company with no owner can stay unassigned
+    const assignee = document.getElementById("edit-company-assignee");
+    assignee.innerHTML = `<option value="">— Unassigned —</option>` +
+      state.users.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("");
+    assignee.value = c.assigned_to || "";
+    renderServiceCheckboxes("edit-company-all-services", c.services);
+    openModal("modal-edit-company");
   });
   document.getElementById("add-contact-btn").addEventListener("click", () => {
     document.getElementById("add-contact-form").dataset.companyId = c.id;
@@ -630,6 +661,40 @@ document.getElementById("add-company-form").addEventListener("submit", async (e)
   payload.services = fd.getAll("services");
   try { await api("/api/companies", { method: "POST", body: JSON.stringify(payload) }); closeModals(); form.reset(); loadCompanies(); }
   catch (err) { alert(err.message); }
+});
+
+document.getElementById("edit-company-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const fd = new FormData(form);
+  const payload = Object.fromEntries(fd.entries());
+  payload.services = fd.getAll("services");
+  payload.assigned_to = payload.assigned_to === "" ? null : Number(payload.assigned_to);
+  try {
+    await api(`/api/companies/${form.dataset.companyId}`, { method: "PUT", body: JSON.stringify(payload) });
+    closeModals();
+    renderCompanyDetail();
+    if (!document.getElementById("view-companies").classList.contains("hidden")) loadCompanies();
+  } catch (err) { alert(err.message); }
+});
+
+document.getElementById("edit-user-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const payload = Object.fromEntries(new FormData(form).entries());
+  try {
+    const updated = await api(`/api/users/${form.dataset.userId}`, { method: "PUT", body: JSON.stringify(payload) });
+    closeModals();
+    // If the admin edited themselves, refresh the sidebar and the nav that depends on role
+    if (updated.id === state.me.id) {
+      state.me = await api("/api/auth/me");
+      document.getElementById("me-name").textContent = state.me.name;
+      document.getElementById("me-role").textContent = state.me.role;
+      document.getElementById("me-avatar").textContent = state.me.name.charAt(0).toUpperCase();
+      document.getElementById("nav-team").classList.toggle("hidden", state.me.role === "agent");
+    }
+    await loadTeam();
+  } catch (err) { alert(err.message); }
 });
 
 document.getElementById("edit-services-form").addEventListener("submit", async (e) => {
