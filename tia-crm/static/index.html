@@ -276,6 +276,40 @@
     </form>
   </div>
 
+  <div id="modal-edit-company" class="modal hidden">
+    <h2>Edit company</h2>
+    <form id="edit-company-form">
+      <label>Company name *</label><input type="text" name="name" required />
+      <div class="field-row">
+        <div><label>Industry</label><input type="text" name="industry" /></div>
+        <div><label>Website</label><input type="text" name="website" /></div>
+      </div>
+      <div class="field-row">
+        <div><label>Source</label><input type="text" name="source" /></div>
+        <div><label>Tender reference</label><input type="text" name="tender_reference" /></div>
+      </div>
+      <div class="field-row">
+        <div><label>Status</label>
+          <select name="status">
+            <option value="new">New</option>
+            <option value="contacted">Contacted</option>
+            <option value="interested">Interested</option>
+            <option value="not_interested">Not interested</option>
+            <option value="customer">Customer</option>
+            <option value="do_not_contact">Do not contact</option>
+          </select>
+        </div>
+        <div><label>Assigned to</label><select name="assigned_to" id="edit-company-assignee"></select></div>
+      </div>
+      <label>Services interested in</label>
+      <div class="checkbox-group" id="edit-company-all-services"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="submit" class="btn btn-primary">Save changes</button>
+      </div>
+    </form>
+  </div>
+
   <div id="modal-add-contact" class="modal hidden">
     <h2>Add contact</h2>
     <form id="add-contact-form">
@@ -446,6 +480,24 @@
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
         <button type="submit" class="btn btn-primary">Add member</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="modal-edit-user" class="modal hidden">
+    <h2>Edit team member</h2>
+    <form id="edit-user-form">
+      <label>Name *</label><input type="text" name="name" required />
+      <label>Email *</label><input type="email" name="email" required />
+      <label>Role</label>
+      <select name="role">
+        <option value="agent">Agent</option>
+        <option value="manager">Manager</option>
+        <option value="admin">Admin</option>
+      </select>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="submit" class="btn btn-primary">Save changes</button>
       </div>
     </form>
   </div>
