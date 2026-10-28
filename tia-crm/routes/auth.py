@@ -98,6 +98,46 @@ def list_users():
     return jsonify([u.to_dict() for u in users])
 
 
+@auth_bp.route("/api/users/<int:user_id>", methods=["PUT"])
+@role_required("admin")
+def update_user(user_id):
+    """Edit a team member's name, email and role (admin only)."""
+    user = User.query.get_or_404(user_id)
+    data = request.get_json(force=True)
+
+    if "name" in data:
+        name = (data.get("name") or "").strip()
+        if not name:
+            return jsonify({"error": "Name can't be empty"}), 400
+        user.name = name
+
+    if "email" in data:
+        email = (data.get("email") or "").strip().lower()
+        if not email or "@" not in email:
+            return jsonify({"error": "A valid email is required"}), 400
+        clash = User.query.filter(User.email == email, User.id != user.id).first()
+        if clash:
+            return jsonify({"error": "Another team member already uses that email"}), 409
+        user.email = email
+
+    if "role" in data:
+        role = data.get("role")
+        if role not in ROLES:
+            return jsonify({"error": "Invalid role"}), 400
+        # Never allow the system to end up with no admin (and therefore nobody who can manage users)
+        if user.role == "admin" and role != "admin" and User.query.filter_by(role="admin").count() <= 1:
+            return jsonify({"error": "There must be at least one admin — promote someone else first"}), 400
+        user.role = role
+
+    db.session.commit()
+
+    # Keep the signed-in admin's own session in step if they edited themselves
+    if user.id == session.get("user_id"):
+        session["name"] = user.name
+        session["role"] = user.role
+    return jsonify(user.to_dict())
+
+
 @auth_bp.route("/api/users/<int:user_id>/reset_password", methods=["POST"])
 @role_required("admin")
 def reset_password(user_id):
