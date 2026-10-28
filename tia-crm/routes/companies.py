@@ -112,9 +112,17 @@ def update_company(company_id):
         return jsonify({"error": "You don't have access to this company"}), 403
 
     data = request.get_json(force=True)
-    for field in ["name", "industry", "website", "source", "assigned_to", "tender_reference"]:
+    if "name" in data:
+        name = (data.get("name") or "").strip()
+        if not name:
+            return jsonify({"error": "name is required"}), 400
+        company.name = name
+    for field in ["industry", "website", "source", "tender_reference"]:
         if field in data:
-            setattr(company, field, data[field])
+            value = data[field]
+            setattr(company, field, value.strip() or None if isinstance(value, str) else value)
+    if "assigned_to" in data:
+        company.assigned_to = int(data["assigned_to"]) if data["assigned_to"] not in (None, "") else None
     if "status" in data and data["status"] in COMPANY_STATUSES:
         company.status = data["status"]
     if "services" in data:
