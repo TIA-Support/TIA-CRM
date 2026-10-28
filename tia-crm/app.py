@@ -1,5 +1,5 @@
 import os
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, session, request
 from werkzeug.security import generate_password_hash
 
 from models import db, User
@@ -31,6 +31,19 @@ def create_app():
     )
 
     db.init_app(app)
+
+    @app.before_request
+    def refresh_session_from_db():
+        """The session cookie caches name/role at login. Re-read them on every API call so that
+        an admin editing someone's role (or removing a user) takes effect immediately instead of
+        only after that person logs out and back in."""
+        if request.path.startswith("/api/") and "user_id" in session:
+            user = db.session.get(User, session["user_id"])
+            if user is None:
+                session.clear()
+            else:
+                session["role"] = user.role
+                session["name"] = user.name
 
     with app.app_context():
         db.create_all()
