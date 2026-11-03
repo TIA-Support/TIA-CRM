@@ -230,7 +230,7 @@
       </div>
       <div class="table-wrap">
         <table id="orders-table">
-          <thead><tr><th>Order</th><th>Company</th><th>Service</th><th>Qty</th><th>Value</th><th>Received</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Order</th><th>Company</th><th>Service</th><th>Qty</th><th>Value</th><th>Received</th><th>Renewal</th><th>Status</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -449,6 +449,9 @@
       </div>
       <div class="field-row">
         <div><label>Received date</label><input type="date" name="received_at" /></div>
+        <div><label>Renewal date</label><input type="date" name="renewal_date" /></div>
+      </div>
+      <div class="field-row">
         <div><label>Status</label>
           <select name="status">
             <option value="received">Received</option>
