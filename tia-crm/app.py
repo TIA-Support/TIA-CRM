@@ -12,6 +12,16 @@ def _normalize_db_url(url):
     return url
 
 
+def _add_missing_columns():
+    """db.create_all() creates new tables but never adds columns to existing ones.
+    Add any new columns here so upgrading an existing database needs no manual SQL."""
+    from sqlalchemy import inspect, text
+    existing = {c["name"] for c in inspect(db.engine).get_columns("orders")}
+    if "renewal_date" not in existing:
+        db.session.execute(text("ALTER TABLE orders ADD COLUMN renewal_date DATE"))
+        db.session.commit()
+
+
 def create_app():
     app = Flask(__name__, static_folder="static", static_url_path="")
     app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
@@ -47,6 +57,7 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        _add_missing_columns()
 
         admin_email = os.environ.get("ADMIN_EMAIL")
         admin_password = os.environ.get("ADMIN_PASSWORD")
