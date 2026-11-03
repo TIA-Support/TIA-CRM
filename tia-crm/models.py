@@ -201,6 +201,7 @@ class Order(db.Model):
     status = db.Column(db.String(20), nullable=False, default="received")
     received_at = db.Column(db.Date, default=date.today)
     dispatched_at = db.Column(db.Date)
+    renewal_date = db.Column(db.Date)  # when this order/service/licence is next due for renewal
     assigned_to = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -217,6 +218,7 @@ class Order(db.Model):
             "status": self.status,
             "received_at": self.received_at.isoformat() if self.received_at else None,
             "dispatched_at": self.dispatched_at.isoformat() if self.dispatched_at else None,
+            "renewal_date": self.renewal_date.isoformat() if self.renewal_date else None,
             "assigned_to": self.assigned_to,
             "assigned_name": self.assignee.name if self.assignee else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
