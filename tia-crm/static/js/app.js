@@ -469,6 +469,9 @@ function renderTabPanel(c) {
           ${o.service ? `<span class="stage-pill">${escapeHtml(SERVICE_LABELS[o.service] || o.service)}</span> · ` : ""}
           Qty ${o.quantity} · Received ${formatDate(o.received_at)}${o.dispatched_at ? " · Dispatched " + formatDate(o.dispatched_at) : ""}
         </div>
+        <div class="deal-meta" style="margin-top:6px">
+          Renewal: <input type="date" data-order-renewal-detail="${o.id}" value="${o.renewal_date || ""}" style="width:auto; padding:4px 8px; font-size:12px;" /> ${renewalLabel(o.renewal_date)}
+        </div>
         <div style="margin-top:8px; display:flex; align-items:center; justify-content:space-between;">
           <span class="order-status-chip order-status-${o.status}">${ORDER_STATUS_LABELS[o.status]}</span>
           <select data-order-status-select="${o.id}" style="width:auto; padding:4px 8px; font-size:12px;">
@@ -477,6 +480,9 @@ function renderTabPanel(c) {
         </div>
       </div>
     `).join("") : `<div class="empty-state">No orders yet.</div>`;
+    panel.querySelectorAll("[data-order-renewal-detail]").forEach((input) => input.addEventListener("change", async () => {
+      try { await saveRenewalDate(input.dataset.orderRenewalDetail, input.value); renderCompanyDetail(); } catch (err) { alert(err.message); }
+    }));
     panel.querySelectorAll("[data-order-status-select]").forEach((select) => {
       select.addEventListener("change", async () => {
         await api(`/api/orders/${select.dataset.orderStatusSelect}`, { method: "PUT", body: JSON.stringify({ status: select.value }) });
@@ -593,6 +599,21 @@ async function loadTasks() {
 }
 document.getElementById("task-status-filter").addEventListener("change", loadTasks);
 
+// Renewal helpers: shows how far away a renewal is, colour-coded
+function renewalLabel(dateStr) {
+  if (!dateStr) return "";
+  const today = new Date().toLocaleDateString("en-CA"); // local YYYY-MM-DD
+  const days = Math.round((new Date(dateStr + "T00:00:00") - new Date(today + "T00:00:00")) / 86400000);
+  if (days < 0) return `<span style="color:#b42318;font-weight:600">Overdue by ${-days}d</span>`;
+  if (days === 0) return `<span style="color:#b54708;font-weight:600">Due today</span>`;
+  if (days <= 30) return `<span style="color:#b54708;font-weight:600">Due in ${days}d</span>`;
+  return `<span style="color:var(--ink-soft)">In ${days}d</span>`;
+}
+
+async function saveRenewalDate(orderId, value) {
+  await api(`/api/orders/${orderId}`, { method: "PUT", body: JSON.stringify({ renewal_date: value || null }) });
+}
+
 async function loadOrders() {
   const status = document.getElementById("order-status-filter").value;
   const service = document.getElementById("order-service-filter").value;
@@ -611,16 +632,23 @@ async function loadOrders() {
       <td class="mono">${o.value != null ? formatCurrency(o.value) : "—"}</td>
       <td>${formatDate(o.received_at)}</td>
       <td>
+        <input type="date" data-order-renewal="${o.id}" value="${o.renewal_date || ""}" style="width:auto; padding:4px 8px; font-size:12px;" />
+        <div style="font-size:11px;margin-top:2px">${renewalLabel(o.renewal_date)}</div>
+      </td>
+      <td>
         <select data-order-list-status="${o.id}" style="width:auto; padding:4px 8px; font-size:12px;">
           ${Object.keys(ORDER_STATUS_LABELS).map((s) => `<option value="${s}" ${s === o.status ? "selected" : ""}>${ORDER_STATUS_LABELS[s]}</option>`).join("")}
         </select>
       </td>
       <td><button class="btn btn-ghost btn-sm" data-delete-order="${o.id}">Delete</button></td>
-    </tr>`).join("") : `<tr><td colspan="8"><div class="empty-state">No orders yet.</div></td></tr>`;
+    </tr>`).join("") : `<tr><td colspan="9"><div class="empty-state">No orders yet.</div></td></tr>`;
 
   tbody.querySelectorAll("[data-order-list-status]").forEach((select) => select.addEventListener("change", async () => {
     await api(`/api/orders/${select.dataset.orderListStatus}`, { method: "PUT", body: JSON.stringify({ status: select.value }) });
     loadOrders();
+  }));
+  tbody.querySelectorAll("[data-order-renewal]").forEach((input) => input.addEventListener("change", async () => {
+    try { await saveRenewalDate(input.dataset.orderRenewal, input.value); loadOrders(); } catch (err) { alert(err.message); }
   }));
   tbody.querySelectorAll("[data-delete-order]").forEach((btn) => btn.addEventListener("click", async () => {
     if (!confirm("Delete this order?")) return;
