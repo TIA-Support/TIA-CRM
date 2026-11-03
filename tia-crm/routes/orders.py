@@ -51,6 +51,7 @@ def create_order():
         status=data.get("status") if data.get("status") in ORDER_STATUSES else "received",
         received_at=date.fromisoformat(data["received_at"]) if data.get("received_at") else date.today(),
         dispatched_at=date.fromisoformat(data["dispatched_at"]) if data.get("dispatched_at") else None,
+        renewal_date=date.fromisoformat(data["renewal_date"]) if data.get("renewal_date") else None,
         assigned_to=data.get("assigned_to") or current_user_id(),
         created_by=current_user_id(),
     )
@@ -76,6 +77,8 @@ def update_order(order_id):
         order.received_at = date.fromisoformat(data["received_at"]) if data["received_at"] else None
     if "dispatched_at" in data:
         order.dispatched_at = date.fromisoformat(data["dispatched_at"]) if data["dispatched_at"] else None
+    if "renewal_date" in data:
+        order.renewal_date = date.fromisoformat(data["renewal_date"]) if data["renewal_date"] else None
     if "status" in data and data["status"] in ORDER_STATUSES:
         order.status = data["status"]
         # convenience: flipping to "dispatched" stamps the date if one wasn't set explicitly
